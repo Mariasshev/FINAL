@@ -3,7 +3,10 @@
 #include <windows.h>
 #include <windowsX.h>
 #include <tchar.h>
+#include <map>
+#include <algorithm>
 #include <fstream>
+#include <sstream>
 #include <vector>
 #include <string>
 #include <ostream>

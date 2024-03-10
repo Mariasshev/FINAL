@@ -13,6 +13,4 @@ public:
 	void Cls_OnClose(HWND hwnd);
 	BOOL Cls_OnInitDialog(HWND hwnd, HWND hwndFocus, LPARAM lParam);
 	void Cls_OnTimer(HWND hwnd, UINT id);
-	
-	//HWND hChooseFileBut, hStartBut, hStopBut, hEndBut, hWords, hResult, hProgress;
 };
