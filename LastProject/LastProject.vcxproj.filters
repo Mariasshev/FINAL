@@ -29,6 +29,9 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="LastProjectDlg.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="LastProject.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

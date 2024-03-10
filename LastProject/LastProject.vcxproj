@@ -134,6 +134,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="LastProject.cpp" />
+    <ClCompile Include="LastProjectDlg.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="LastProject.rc" />
