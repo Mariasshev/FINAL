@@ -18,6 +18,8 @@ map<string, int> wordCountMap;
 
 int totalWordCount = 0;  // words counter
 
+
+
 FindWords::FindWords(void)
 {
     ptr = this;
@@ -68,14 +70,10 @@ DWORD WINAPI ProgressThread(LPVOID lpParam)
     for (int i = 0; i <= 100; ++i) {
         SendMessage(hProgress, PBM_SETPOS, i, 0);
         Sleep(100);
-
-        // Перевірка, чи треба зупинити потік
         if (stopProgress) {
-            // Призупинення потоку
             while (stopProgress) {
                 Sleep(100);
             }
-            // Повторне встановлення позиції прогресу, якщо потік відновлено
             SendMessage(hProgress, PBM_SETPOS, i, 0);
         }
     }
@@ -187,37 +185,21 @@ DWORD WINAPI StatisticsThread(LPVOID lpParam) {
 
 void WriteStars() {
 
-    size_t currentIndex = 0;
-    wstring filePath = L"C:\\Users\\Admin\\source\\repos\\LastProject\\LastProject\\texts\\res.txt";
+    ofstream outFile("C:\\Users\\Admin\\source\\repos\\LastProject\\LastProject\\texts\\res.txt");
 
-    // create a file
-    HANDLE hFile = CreateFile(filePath.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-
-    if (hFile != INVALID_HANDLE_VALUE) {
-        // write
-        DWORD bytesWritten;
+    if (outFile.is_open()) {
         for (const auto& word : words) {
-            string replacement = "******* ";
-            currentIndex++;
-            if (!WriteFile(hFile, replacement.c_str(), static_cast<DWORD>(replacement.size()), &bytesWritten, NULL)) {
-                MessageBoxA(NULL, "Failed to create file", "Result", MB_OK | MB_ICONINFORMATION);
-                CloseHandle(hFile);
-                return;
-            }
-            if (currentIndex == words.size())
-            {
-                MessageBoxA(NULL, "File created!", "Result", MB_OK | MB_ICONINFORMATION);
-
-            }
+            outFile << "******* ";
         }
 
-        // close file
-        CloseHandle(hFile);
+        MessageBoxA(NULL, "File created!", "Result", MB_OK | MB_ICONINFORMATION);
+
+        outFile.close();
     }
-    else
-    {
+    else {
         MessageBoxA(NULL, "Failed to create file", "Result", MB_OK | MB_ICONINFORMATION);
     }
+    
 
 }
 
@@ -244,7 +226,6 @@ DWORD WINAPI FileProcessingThread(LPVOID lpParam) {
     }
     
     WaitForMultipleObjects(5, hThreads, TRUE, INFINITE);
-    //WaitForSingleObject(StatisticsThread, INFINITE);
     // create a thread for the progress bar
     
     HANDLE hProgressThread = CreateThread(NULL, 0, ProgressThread, hProgress, 0, NULL);
@@ -254,7 +235,6 @@ DWORD WINAPI FileProcessingThread(LPVOID lpParam) {
     WaitForSingleObject(hEvent, INFINITE);
     Sleep(500);
        
-
     // closing thread handles
     for (int i = 0; i < 5; ++i) {
         CloseHandle(hThreads[i]);

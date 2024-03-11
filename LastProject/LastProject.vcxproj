@@ -140,6 +140,7 @@
     <ResourceCompile Include="LastProject.rc" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="..\..\..\..\Pictures\icon.jpg" />
     <Image Include="LastProject.ico" />
     <Image Include="small.ico" />
   </ItemGroup>
