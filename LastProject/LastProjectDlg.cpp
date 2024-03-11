@@ -1,24 +1,31 @@
 ﻿#include "LastProject.h"
 
-HWND hChooseFileBut, hStartBut, hStopBut, hEndBut,hResumeBut, hWords, hResult, hProgress;
+HANDLE hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+HWND hChooseFileBut, hStartBut, hStopBut, hEndBut, hResumeBut, hWords, hResult, hProgress, hDialog;
 FindWords* FindWords::ptr = NULL;
 HANDLE hMutex;
-HANDLE hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-vector<string> words;
-HWND hDialog;
+
+vector<string> words;               //array with words
+vector<string> filesNames;          //files name array
+vector<string> filePaths;           //path array
+vector<int> fileSizes;              //size array
+vector<int> wordsAmount;            //count words in every files
+map<string, int> wordCountMap;
 HANDLE hThreads[5];
 bool stopProgress = false;
 
+//prototypes
+DWORD WINAPI ProgressThread(LPVOID lpParam);
+void WriteStatisticsToFile();
+void GetFileInfo(const string& filePath, string& fileName, int& fileSize);
+void GetStatistics(const string& filePath);
+void WriteWordsToFile();
+DWORD WINAPI CountWordsInFile(LPVOID lpParam);
+DWORD WINAPI StatisticsThread(LPVOID lpParam);
+void WriteStars();
+DWORD WINAPI FileProcessingThread(LPVOID lpParam);
 
-vector<string> filesWithWords;
-vector<string> filePaths;
-vector<int> fileSizes;
-vector<int> wordsAmount;
-map<string, int> wordCountMap;
-
-int totalWordCount = 0;  // words counter
-
-
+int totalWordCount = 0;  // main words counter
 
 FindWords::FindWords(void)
 {
@@ -26,14 +33,11 @@ FindWords::FindWords(void)
     hDialog = NULL;
 }
 
-FindWords::~FindWords(void)
-{
-
-}
+FindWords::~FindWords(void){}
 
 void FindWords::Cls_OnClose(HWND hwnd)
 {
-    ReleaseMutex(hMutex); // освобождение мьютекса
+    ReleaseMutex(hMutex);
     EndDialog(hwnd, 0);
 }
 
@@ -60,18 +64,20 @@ BOOL FindWords::Cls_OnInitDialog(HWND hwnd, HWND hwndFocus, LPARAM lParam)
     SendMessage(hProgress, PBM_SETBARCOLOR, 0, LPARAM(RGB(255, 255, 0))); // установка цвета заполн¤емых пр¤моугольников
 
     EnableWindow(hStartBut, FALSE);
-
-
     return TRUE;
 }
 
 DWORD WINAPI ProgressThread(LPVOID lpParam)
 {
+    //thread for progress bar
     for (int i = 0; i <= 100; ++i) {
         SendMessage(hProgress, PBM_SETPOS, i, 0);
         Sleep(100);
-        if (stopProgress) {
-            while (stopProgress) {
+        if (stopProgress) 
+        {
+            //check here stopProgress state
+            while (stopProgress) 
+            {
                 Sleep(100);
             }
             SendMessage(hProgress, PBM_SETPOS, i, 0);
@@ -82,179 +88,137 @@ DWORD WINAPI ProgressThread(LPVOID lpParam)
 
 //---------------------------
 
-//Функция для записи статистики в файл
-void WriteStatisticsToFile() {
+//WRITE STATISTIC IN FILE
+void WriteStatisticsToFile() 
+{
     SetEvent(hEvent);
     ofstream outputFile("statistic.txt");
-
+    Sleep(100);
     if (outputFile.is_open()) {
 
-        for (size_t i = 0; i < filesWithWords.size(); ++i) {
-            Sleep(100);
-            outputFile << "File Name: " << filesWithWords[i] << endl;
+        for (size_t i = 0; i < filesNames.size(); ++i) 
+        {
+           
+            outputFile << "File Name: " << filesNames[i] << endl;
             outputFile << "File Path: " << filePaths[i] << endl;
             outputFile << "File Size: " << fileSizes[i] << " bytes" << endl;
             outputFile << "Amount of words: " << wordsAmount[i] << " words" << endl;
             outputFile << endl;
         }
 
-        // Записываем информацию о самых популярных словах
+        //popular words
         outputFile << "Most Popular Words:" << endl;
         for (const auto& entry : wordCountMap) {
             outputFile << entry.first << ": " << entry.second << " occurrences" << endl;
         }
-
         outputFile.close();
-
-
     }
 }
 
-// Функция для получения информации о файле
-void GetFileInfo(const string& filePath, string& fileName, int& fileSize) {
+void GetFileInfo(const string& filePath, string& fileName, int& fileSize) 
+{
     fileName = filePath.substr(filePath.find_last_of("\\") + 1);
 
     ifstream file(filePath, ios::binary | ios::ate);
     fileSize = static_cast<int>(file.tellg());
 }
 
-// Функция для получения статистики
-void GetStatistics(const string& filePath) {
+void GetStatistics(const string& filePath) 
+{
     string fileName;
     int fileSize;
 
-
     GetFileInfo(filePath, fileName, fileSize);
 
-    // Добавляем информацию о файле
-    filesWithWords.push_back(fileName);
+    //add info in arrays
+    filesNames.push_back(fileName);
     filePaths.push_back(filePath);
     fileSizes.push_back(fileSize);
 
 }
 
-// Функция для записи слов в файл
-void WriteWordsToFile() {
-    ofstream outputFile("statistic.txt", ios::app);
-
-    if (outputFile.is_open()) {
-        outputFile << "Words in array: ";
-        for (const auto& word : words) {
-            outputFile << word << " ";
-        }
-        outputFile << endl;
-        outputFile.close();
-    }
-}
 
 // Функция для подсчета слов
-DWORD WINAPI CountWordsInFile(LPVOID lpParam) {
-    string filePath = static_cast<const char*>(lpParam);
-    FindWords* findWords = (FindWords*)lpParam;
-    ifstream file(filePath);
+DWORD WINAPI CountWordsInFile(LPVOID lpParam) 
+{
+    string path = static_cast<const char*>(lpParam);
+    ifstream file(path);
     int counter = 0;
-    if (file.is_open()) {
+    if (file.is_open()) 
+    {
         string word;
         counter = 0;
-        while (file >> word) {
-            if (find(words.begin(), words.end(), word) != words.end()) {
+        while (file >> word) 
+        {
+            if (find(words.begin(), words.end(), word) != words.end()) 
+            {
                 ++totalWordCount;
                 ++counter;
             }
         }
         wordsAmount.push_back(counter);
         file.close();
-        
-
-        // Получаем статистику о файле
-        GetStatistics(filePath);
+        GetStatistics(path);
     }
 
     return 0;
 }
 DWORD WINAPI FileProcessingThread(LPVOID lpParam);
 
-// Функция для записи статистики в файл
-DWORD WINAPI StatisticsThread(LPVOID lpParam) {
+
+DWORD WINAPI StatisticsThread(LPVOID lpParam) 
+{
     WriteStatisticsToFile();
     return 0;
 }
 
-
 //---------------------------
 
-void WriteStars() {
+void WriteStars() 
+{
 
-    ofstream outFile("C:\\Users\\Admin\\source\\repos\\LastProject\\LastProject\\texts\\res.txt");
+    size_t currentIndex = 0;
+    wstring filePath = L"C:\\Users\\Admin\\source\\repos\\LastProject\\LastProject\\texts\\res.txt";
 
-    if (outFile.is_open()) {
-        for (const auto& word : words) {
-            outFile << "******* ";
+    // create a file
+    HANDLE hFile = CreateFile(filePath.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+    if (hFile != INVALID_HANDLE_VALUE) {
+        // write
+        DWORD bytesWritten;
+        for (const auto& word : words) 
+        {
+            string replacement = " ******* ";
+            currentIndex++;
+            if (!WriteFile(hFile, replacement.c_str(), static_cast<DWORD>(replacement.size()), &bytesWritten, NULL)) {
+                MessageBoxA(NULL, "Failed to create file", "Result", MB_OK | MB_ICONINFORMATION);
+                CloseHandle(hFile);
+                return;
+            }
+            if (currentIndex == words.size())
+            {
+                MessageBoxA(NULL, "File created!", "Result", MB_OK | MB_ICONINFORMATION);
+
+            }
         }
 
-        MessageBoxA(NULL, "File created!", "Result", MB_OK | MB_ICONINFORMATION);
-
-        outFile.close();
+        // close file
+        CloseHandle(hFile);
     }
-    else {
+    else
+    {
         MessageBoxA(NULL, "Failed to create file", "Result", MB_OK | MB_ICONINFORMATION);
     }
-    
 
 }
-
-
-// Основная функция обработки файлов
-DWORD WINAPI FileProcessingThread(LPVOID lpParam) {
-    FindWords* ptr = (FindWords*)lpParam;
-
-    // Создаем поток для записи статистики
-    HANDLE hStatisticsThread = CreateThread(NULL, 0, StatisticsThread, NULL, 0, NULL);
-    // directory with files
-    string directoryPath = "C:\\Users\\Admin\\source\\repos\\LastProject\\LastProject\\texts\\";
-    for (int i = 1; i <= 5; ++i) {
-        //searching for files text1.txt, text2.txt...
-        string filePath = directoryPath + "text" + to_string(i) + ".txt";
-
-        // create threads for files
-        HANDLE hThread = CreateThread(NULL, 0, CountWordsInFile, (LPVOID)filePath.c_str(), 0, NULL);
-
-        // save thread`s handle in array
-        hThreads[i - 1] = hThread;
-        // waiting for thread to complete
-        WaitForSingleObject(hThread, INFINITE);
-    }
-    
-    WaitForMultipleObjects(5, hThreads, TRUE, INFINITE);
-    // create a thread for the progress bar
-    
-    HANDLE hProgressThread = CreateThread(NULL, 0, ProgressThread, hProgress, 0, NULL);
-    // waiting end of progress bar
-    WaitForSingleObject(hProgressThread, INFINITE);
-
-    WaitForSingleObject(hEvent, INFINITE);
-    Sleep(500);
-       
-    // closing thread handles
-    for (int i = 0; i < 5; ++i) {
-        CloseHandle(hThreads[i]);
-    }
-    // waiting for statistics thread to complete
-
-
-    // show result in MessageBox
-    string resultMessage = "Total word count in files: " + to_string(totalWordCount);
-    MessageBoxA(NULL, resultMessage.c_str(), "Result", MB_OK | MB_ICONINFORMATION);
-    WriteStars();
-    WriteWordsToFile();
-
+void ShowInf()
+{
     char buf[100];
     ifstream in("statistic.txt", ios::in | ios::binary);
 
     if (!in)
     {
         MessageBoxA(hDialog, "Ошибка открытия файла!", "Ошибка", MB_OK | MB_ICONINFORMATION);
-        return 1;
     }
     else
     {
@@ -268,14 +232,132 @@ DWORD WINAPI FileProcessingThread(LPVOID lpParam) {
     }
 
     in.close();
+}
+
+// Основная функция обработки файлов
+DWORD WINAPI FileProcessingThread(LPVOID lpParam) 
+{
+
+    // create a thread for statistics
+    HANDLE hStatisticsThread = CreateThread(NULL, 0, StatisticsThread, NULL, 0, NULL);
+    // directory with files
+    string directoryPath = "C:\\Users\\Admin\\source\\repos\\LastProject\\LastProject\\texts\\";
+    for (int i = 1; i <= 5; ++i) 
+    {
+        //searching for files text1.txt, text2.txt...
+        string filePath = directoryPath + "text" + to_string(i) + ".txt";
+        // create threads for files
+        HANDLE hThread = CreateThread(NULL, 0, CountWordsInFile, (LPVOID)filePath.c_str(), 0, NULL);
+        // save thread`s handle in array
+        hThreads[i - 1] = hThread;
+        // waiting for thread to complete
+        WaitForSingleObject(hThread, INFINITE);
+    }
+
+    WaitForMultipleObjects(5, hThreads, TRUE, INFINITE);
+    //WaitForSingleObject(StatisticsThread, INFINITE);
+    // create a thread for the progress bar
+
+    HANDLE hProgressThread = CreateThread(NULL, 0, ProgressThread, hProgress, 0, NULL);
+    // waiting end of progress bar
+    WaitForSingleObject(hProgressThread, INFINITE);
+
+    WaitForSingleObject(hEvent, INFINITE);
+    Sleep(500);
+
+
+    // closing thread handles
+    for (int i = 0; i < 5; ++i) 
+    {
+        CloseHandle(hThreads[i]);
+    }
+    // waiting for statistics thread to complete
+
+
+    // show result in MessageBox
+    string resultMessage = "Total word count in files: " + to_string(totalWordCount);
+    MessageBoxA(NULL, resultMessage.c_str(), "Result", MB_OK | MB_ICONINFORMATION);
+    //change words to ***
+    WriteStars();
+    //show statistic in EDIT
+    ShowInf();
+    
 
     return 0;
 }
 
-
-void FindWords::Cls_OnTimer(HWND hwnd, UINT id)
+void EditCheck()
 {
-    SendMessage(hProgress, PBM_STEPIT, 0, 0); 
+    // get text length
+    int textLength = GetWindowTextLength(hWords);
+    if (textLength != 0)
+    {
+        vector<TCHAR> buffer(textLength + 1);
+        //get text
+        GetWindowText(hWords, buffer.data(), textLength + 1);
+
+        // from TCHAR to string
+        string text(buffer.begin(), buffer.end());
+
+        words.clear();
+
+        istringstream stream(text);
+        string word;
+
+        while (stream >> word)
+        {
+            words.push_back(word);
+        }
+
+        EnableWindow(hStartBut, TRUE);
+    }
+    else
+    {
+        //nothing
+    }
+}
+void OpenFile(HWND hwnd)
+
+{
+    TCHAR FullPath[MAX_PATH] = { 0 };
+    OPENFILENAME open = { sizeof(OPENFILENAME) };
+    open.hwndOwner = hwnd;
+    open.lpstrFilter = TEXT("Text Files(*.txt)\0*.txt\0All Files(*.*)\0*.*\0");
+    open.lpstrFile = FullPath;
+    open.nMaxFile = MAX_PATH;
+    open.lpstrInitialDir = TEXT("C:\\");
+    open.Flags = OFN_CREATEPROMPT | OFN_PATHMUSTEXIST;
+
+    if (GetOpenFileName(&open))
+    {
+        ifstream file(open.lpstrFile);
+        if (file.is_open())
+        {
+            string word;
+            while (file >> word)
+            {
+                //add words in array
+                words.push_back(word);
+            }
+            file.close();
+
+            string messageText = "Words in the file:\n";
+            for (const auto& word : words)
+            {
+                messageText += word + "\r\n";
+            }
+
+            EnableWindow(hWords, FALSE);
+            SetWindowText(hChooseFileBut, TEXT("File chosen!"));
+            EnableWindow(hStartBut, TRUE);
+            MessageBoxA(hwnd, messageText.c_str(), "File Content", MB_OK | MB_ICONINFORMATION);
+
+        }
+        else
+        {
+            MessageBox(hwnd, TEXT("Error opening the file!"), TEXT("Error"), MB_OK | MB_ICONERROR);
+        }
+    }
 }
 
 BOOL CALLBACK FindWords::DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -286,52 +368,14 @@ BOOL CALLBACK FindWords::DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
         HANDLE_MSG(hwnd, WM_INITDIALOG, ptr->Cls_OnInitDialog);
 
     case WM_COMMAND:
-        if (LOWORD(wParam) == IDC_BUTTON4) 
+        if (LOWORD(wParam) == IDC_BUTTON4)
         {
             ReleaseMutex(hMutex);
             EndDialog(hwnd, 0);
         }
-        if (LOWORD(wParam) == IDC_BUTTON3) 
+        if (LOWORD(wParam) == IDC_BUTTON3)
         {
-            TCHAR FullPath[MAX_PATH] = { 0 };
-            OPENFILENAME open = { sizeof(OPENFILENAME) };
-            open.hwndOwner = hwnd;
-            open.lpstrFilter = TEXT("Text Files(*.txt)\0*.txt\0All Files(*.*)\0*.*\0");
-            open.lpstrFile = FullPath;
-            open.nMaxFile = MAX_PATH;
-            open.lpstrInitialDir = TEXT("C:\\");
-            open.Flags = OFN_CREATEPROMPT | OFN_PATHMUSTEXIST;
-
-            if (GetOpenFileName(&open))
-            {
-                ifstream file(open.lpstrFile);
-                if (file.is_open())
-                {
-                    string word;
-                    while (file >> word)
-                    {
-                        //add words in array
-                        words.push_back(word);
-                    }
-                    file.close();
-
-                    string messageText= "Words in the file:\n";
-                    for (const auto& word : words) 
-                    {
-                        messageText += word + "\r\n";
-                    }
-
-                    EnableWindow(hWords, FALSE);
-                    SetWindowText(hChooseFileBut, TEXT("File chosen!"));
-                    EnableWindow(hStartBut, TRUE);
-                    MessageBoxA(hwnd, messageText.c_str(), "File Content", MB_OK | MB_ICONINFORMATION);
-                    
-                }
-                else
-                {
-                    MessageBox(hwnd, TEXT("Error opening the file!"), TEXT("Error"), MB_OK | MB_ICONERROR);
-                }
-            }
+            OpenFile(hwnd);
         }
         if (LOWORD(wParam) == IDC_BUTTON1)
         {
@@ -341,47 +385,14 @@ BOOL CALLBACK FindWords::DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
         if (LOWORD(wParam) == IDC_BUTTON2)
         {
             stopProgress = true;
-            
         }
         if (LOWORD(wParam) == IDC_BUTTON5)
         {
             stopProgress = false;
-
         }
-    
         break;
-
-
     }
-    // get text length
-    int textLength = GetWindowTextLength(hWords);
-
-    if (textLength == 0)
-    {
-
-    }
-    else
-    {
-        vector<TCHAR> buffer(textLength + 1);
-        GetWindowText(hWords, buffer.data(), textLength + 1);
-
-        // Преобразуем TCHAR в string
-        string text(buffer.begin(), buffer.end());
-
-        words.clear();
-
-        // Используем потоковый ввод для разбивки строки на слова
-        istringstream stream(text);
-        string word;
-
-        // Помещаем слова в векторный массив
-        while (stream >> word)
-        {
-            words.push_back(word);
-        }
-
-        EnableWindow(hStartBut, TRUE);
-    }
-
+    //check edit state
+    EditCheck();
     return FALSE;
 }
